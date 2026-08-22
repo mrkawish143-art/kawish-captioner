@@ -5,12 +5,11 @@ from pydub import AudioSegment, effects
 
 st.set_page_config(page_title="Kawish AI Captioner Pro", page_icon="🎙️", layout="centered")
 st.title("🎙️ Kawish AI Professional Captioner")
-st.caption("3,000 MB File Limit | Video & Audio Support | Advanced Noise Filter")
+st.caption("3,000 MB File Limit | Max 2 Lines Subtitles | Clean English")
 
 GROQ_API_KEY = "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"
 client = Groq(api_key=GROQ_API_KEY)
 
-# 3,000MB لمٹ کے ساتھ ویڈیو اور آڈیو فائل کی اجازت
 uploaded_file = st.file_uploader(
     "موبائل یا پی سی سے آڈیو/ویڈیو فائل منتخب کریں (حداکثر 3,000MB)", 
     type=["mp3", "m4a", "wav", "aac", "mp4", "mkv", "mov", "avi"]
@@ -19,7 +18,6 @@ uploaded_file = st.file_uploader(
 def clean_text(text):
     text = text.strip()
     
-    # تمام فضول کریڈٹس، غلط ناموں اور ہالوسینیشنز کو فلٹر کریں
     bad_patterns = [
         r"translated by", r"subtitles by", r"amara\.org", r"thank you for watching",
         r"ravindra singh", r"rd shahbaz", r"kumar", r"like and subscribe", r"copyright",
@@ -31,7 +29,7 @@ def clean_text(text):
         if re.search(pattern, text, re.IGNORECASE):
             return ""
             
-    if len(text) < 3:
+    if len(text) < 2:
         return ""
         
     return text
@@ -43,11 +41,23 @@ def format_time(seconds):
     ms = int((seconds % 1) * 1000)
     return f"{hrs:02d}:{mins:02d}:{secs:02d},{ms:03d}"
 
+def split_text_into_max_two_lines(text, max_words_per_line=6):
+    """یہ فنکشن لمبے ٹیکسٹ کو زیادہ سے زیادہ 2 لائنوں پر تقسیم کرتا ہے"""
+    words = text.split()
+    if len(words) <= max_words_per_line:
+        return text
+    elif len(words) <= max_words_per_line * 2:
+        mid = len(words) // 2
+        return " ".join(words[:mid]) + "\n" + " ".join(words[mid:])
+    else:
+        # اگر جملہ بہت لمبا ہو تو اسے 2 لائنوں میں فٹ کریں
+        line1 = " ".join(words[:max_words_per_line])
+        line2 = " ".join(words[max_words_per_line:max_words_per_line*2])
+        return line1 + "\n" + line2
+
 def process_audio_chunk(chunk_path):
-    """آڈیو کو صاف اور والیم بوسٹ کرنے کا کا فنکشن"""
     try:
         audio = AudioSegment.from_file(chunk_path)
-        # سلو آوازوں کو آٹو نارملائز اور بوسٹ کریں
         audio = effects.normalize(audio)
         audio.export(chunk_path, format="mp3", bitrate="128k")
     except Exception as e:
@@ -66,29 +76,24 @@ if uploaded_file and st.button("Generate Perfect SRT ⚡"):
     try:
         status_box.info("ویڈیو/آڈیو پروسیس کی جا رہی ہے اور آواز صاف کی جا رہی ہے...")
         audio = AudioSegment.from_file(temp_path)
-        
-        # مدہم آواز کو تیز کرنا
         audio = effects.normalize(audio)
         
         total_duration = len(audio)
-        # 1 منٹ کے چھوٹے ٹکڑے تاکہ AI اک ایک لفظ پر فوکس کرے
         CHUNK_MS = 60 * 1000 
         num_chunks = math.ceil(total_duration / CHUNK_MS)
         all_segments = []
 
-        status_box.info("AI ترجمہ اور سب ٹائٹل تیار کر رہا ہے...")
+        status_box.info("AI ترجمہ اور شارٹ کیپشنز تیار کر رہا ہے...")
         
         for i in range(num_chunks):
             chunk = audio[i*CHUNK_MS : min((i+1)*CHUNK_MS, total_duration)]
             chunk_path = f"chunk_{i}.mp3"
             chunk.export(chunk_path, format="mp3", bitrate="128k")
 
-            # پروسیسنگ سے پہلے والیم مزید بہترین بنانا
             process_audio_chunk(chunk_path)
 
             with open(chunk_path, "rb") as file:
-                # کسٹم گائیڈنس تاکہ AI صرف اور صرف بولے گئے الفاظ کا ترجمہ کرے
-                prompt_text = "Accurate Urdu to English translation. Translate exact spoken dialogue only. Ignore silence, music, and background noise completely."
+                prompt_text = "Accurate Urdu to English translation. Short sentences only. Avoid long paragraphs."
                 
                 transcription = client.audio.translations.create(
                     file=(f"chunk_{i}.mp3", file.read()),
@@ -107,7 +112,6 @@ if uploaded_file and st.button("Generate Perfect SRT ⚡"):
             if os.path.exists(chunk_path): 
                 os.remove(chunk_path)
                 
-            # پروگریس بار اپڈیٹ کریں
             progress_bar.progress((i + 1) / num_chunks)
 
         srt_content = ""
@@ -116,7 +120,9 @@ if uploaded_file and st.button("Generate Perfect SRT ⚡"):
             start, end = format_time(seg['start']), format_time(seg['end'])
             txt = clean_text(seg['text'])
             if txt:
-                srt_content += f"{count}\n{start} --> {end}\n{txt}\n\n"
+                # ٹیکسٹ کو 2 لائنوں سے زیادہ نہ بننے دینے کی گارنٹی
+                formatted_txt = split_text_into_max_two_lines(txt)
+                srt_content += f"{count}\n{start} --> {end}\n{formatted_txt}\n\n"
                 count += 1
 
         if os.path.exists(temp_path): 
@@ -125,7 +131,7 @@ if uploaded_file and st.button("Generate Perfect SRT ⚡"):
         progress_bar.empty()
         
         if srt_content.strip():
-            status_box.success("🎉 .SRT فائل مکمل اور درست ترجمے کے ساتھ تیار ہے!")
+            status_box.success("🎉 .SRT فائل شارٹ کیپشنز (Max 2 Lines) کے ساتھ تیار ہے!")
             st.download_button(
                 "📥 Download .SRT Subtitle File", 
                 srt_content, 
