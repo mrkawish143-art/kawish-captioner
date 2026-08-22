@@ -3,9 +3,9 @@ import os, math, re
 from groq import Groq
 from pydub import AudioSegment, effects
 
-# ایپ کا فائنل نام
-st.set_page_config(page_title="کاوش اے آئی کیپشن", page_icon="🎙️", layout="centered")
-st.title("🎙️ کاوش اے آئی کیپشن")
+# ایپ کا نام اب رومن میں ہے
+st.set_page_config(page_title="Kawish AI Caption", page_icon="🎙️", layout="centered")
+st.title("🎙️ Kawish AI Caption")
 st.caption("3,000 MB File Limit | Max 2 Lines Subtitles | Clean English Translation")
 
 GROQ_API_KEY = "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"
@@ -84,7 +84,7 @@ if uploaded_file and st.button("Generate Perfect SRT ⚡"):
         num_chunks = math.ceil(total_duration / CHUNK_MS)
         all_segments = []
 
-        status_box.info("کاوش اے آئی کیپشن ترجمہ تیار کر رہا ہے...")
+        status_box.info("Kawish AI Caption is preparing translation...")
         
         for i in range(num_chunks):
             chunk = audio[i*CHUNK_MS : min((i+1)*CHUNK_MS, total_duration)]
