@@ -13,10 +13,22 @@ uploaded_file = st.file_uploader("موبائل سے آڈیو فائل منتخب
 
 def clean_text(text):
     text = text.strip()
-    if re.search(r"Translate Urdu|clear English|subtitles|Amara\.org|Thank you for watching", text, re.IGNORECASE):
+    
+    # فالتو نام اور یوٹیوب کریڈٹس کا مکمل خاتمہ
+    bad_phrases = [
+        r"translated by", r"subtitles by", r"amara\.org", r"thank you for watching",
+        r"ravindra singh", r"rd shahbaz", r"kumar", r"like and subscribe", r"copyright",
+        r"captioned by", r"subscribe to my channel", r"bye", r"thanks for watching"
+    ]
+    
+    for pattern in bad_phrases:
+        if re.search(pattern, text, re.IGNORECASE):
+            return ""
+            
+    # اگر صرف 2 یا اس سے کم حروف کا جملہ ہو تو ختم کر دیں
+    if len(text) < 3:
         return ""
-    if re.search(r"[\u0600-\u06FF]", text):
-        return "[Arabic Recitation]"
+        
     return text
 
 def format_time(seconds):
@@ -33,10 +45,11 @@ if uploaded_file and st.button("Generate SRT ⚡"):
             f.write(uploaded_file.getbuffer())
 
         try:
-            custom_prompt = "Islamic speech in Urdu with Arabic Quranic verses. Translate Urdu to English accurately. Mark Quranic recitation clearly."
             audio = AudioSegment.from_file(temp_path)
             total_duration = len(audio)
-            CHUNK_MS = 10 * 60 * 1000
+            
+            # آڈیو کو 3 منٹ کے چھوٹے ٹکڑوں میں کاٹیں تاکہ AI کا دھیان بالکل نہ بھٹکے
+            CHUNK_MS = 3 * 60 * 1000
             num_chunks = math.ceil(total_duration / CHUNK_MS)
             all_segments = []
 
@@ -46,10 +59,10 @@ if uploaded_file and st.button("Generate SRT ⚡"):
                 chunk.export(chunk_path, format="mp3", bitrate="128k")
 
                 with open(chunk_path, "rb") as file:
+                    # متبادل ترجمہ طریقہ جو بغیر ناموں کے صحیح ترجمہ تیار کرتا ہے
                     transcription = client.audio.translations.create(
                         file=(f"chunk_{i}.mp3", file.read()),
                         model="whisper-large-v3",
-                        prompt=custom_prompt,
                         temperature=0.0,
                         response_format="verbose_json"
                     )
@@ -73,8 +86,11 @@ if uploaded_file and st.button("Generate SRT ⚡"):
 
             if os.path.exists(temp_path): os.remove(temp_path)
 
-            st.success("🎉 .SRT فائل تیار ہے!")
-            st.download_button("📥 Download .SRT File", srt_content, file_name=f"{os.path.splitext(uploaded_file.name)[0]}.srt", mime="text/plain")
+            if srt_content.strip():
+                st.success("🎉 .SRT فائل مکمل ترجمے کے ساتھ تیار ہے!")
+                st.download_button("📥 Download .SRT File", srt_content, file_name=f"{os.path.splitext(uploaded_file.name)[0]}.srt", mime="text/plain")
+            else:
+                st.error("آڈیو میں سے کوئی واضح آواز نہیں مل سکی۔ براہ کرم دوبارہ کوشش کریں۔")
 
         except Exception as e:
             st.error(f"Error: {e}")
