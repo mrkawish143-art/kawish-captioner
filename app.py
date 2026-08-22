@@ -1,146 +1,60 @@
 import streamlit as st
-import os, math, re
-from groq import Groq
-from pydub import AudioSegment, effects
+import whisper
+import os
 
-# ایپ کا نام اب رومن میں ہے
-st.set_page_config(page_title="Kawish AI Caption", page_icon="🎙️", layout="centered")
-st.title("🎙️ Kawish AI Caption")
-st.caption("3,000 MB File Limit | Max 2 Lines Subtitles | Clean English Translation")
+st.set_page_config(page_title="Kawish AI Captioner", layout="centered")
 
-GROQ_API_KEY = "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"
-client = Groq(api_key=GROQ_API_KEY)
+st.title("Kawish AI Captioner")
+st.write("اپنی ویڈیو اپلوڈ کریں اور پرفیکٹ کیپشن حاصل کریں")
 
-# 3,000MB Limit and file types
-uploaded_file = st.file_uploader(
-    "موبائل یا پی سی سے آڈیو/ویڈیو فائل منتخب کریں (حداکثر 3,000MB)", 
-    type=["mp3", "m4a", "wav", "aac", "mp4", "mkv", "mov", "avi"]
-)
+# 1. ویڈیو اپلوڈر (3000MB لمٹ کے ساتھ)
+uploaded_file = st.file_uploader("ویڈیو منتخب کریں...", type=["mp4", "mov", "avi", "mkv"])
 
-def clean_text(text):
-    text = text.strip()
+if uploaded_file is not None:
+    # ویڈیو کو عارضی سیو کرنا
+    with open("temp_video.mp4", "wb") as f:
+        f.write(uploaded_file.read())
     
-    bad_patterns = [
-        r"translated by", r"subtitles by", r"amara\.org", r"thank you for watching",
-        r"ravindra singh", r"rd shahbaz", r"kumar", r"like and subscribe", r"copyright",
-        r"captioned by", r"subscribe to my channel", r"bye", r"thanks for watching",
-        r"translated urdu", r"clear english", r"realtor"
-    ]
+    st.video("temp_video.mp4")
     
-    for pattern in bad_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
-            return ""
+    if st.button("کیپشن تیار کریں"):
+        try:
+            # اسکرین پر سرچنگ اور لوڈنگ کا اینیمیشن
+            with st.spinner("AI آواز سن رہا ہے اور امریکی انگلش میں ترجمہ کر رہا ہے..."):
+                
+                # Whisper ماڈل لوڈ کرنا (Small یا Medium بہتر رزلٹ دیتا ہے)
+                model = whisper.load_model("small")
+                
+                # 2. آواز کو سن کر امریکن انگلش میں ٹرانسلیٹ کرنا (task='translate')
+                result = model.transcribe("temp_video.mp4", task="translate", language="ur") # یا جو بھی زبان ہو
+                
+                st.progress(100)
+                st.success("✨ کیپشن کامیابی سے تیار ہو گیا ہے!")
+                
+                # 3. میکسیمم 2 لائنوں میں دکھانے کا فارمیٹ
+                segments = result["segments"]
+                st.subheader("آپ کے کیپشن (2-Line Format):")
+                
+                full_text = ""
+                for seg in segments:
+                    text = seg['text'].strip()
+                    # اگر ٹیکسٹ بڑا ہو تو اسے 2 لائنوں پر محدود رکھنا
+                    words = text.split()
+                    if len(words) > 12:
+                        mid = len(words) // 2
+                        line1 = " ".join(words[:mid])
+                        line2 = " ".join(words[mid:])
+                        formatted_caption = f"{line1}\n{line2}"
+                    else:
+                        formatted_caption = text
+                    
+                    st.text_area(label="Time: " + str(round(seg['start'], 1)) + "s - " + str(round(seg['end'], 1)) + "s", 
+                                 value=formatted_caption, 
+                                 height=70)
+                    
+        except Exception as e:
+            st.error(f"ایرر آ گیا ہے: {str(e)}")
             
-    if len(text) < 2:
-        return ""
-        
-    return text
-
-def format_time(seconds):
-    hrs = int(seconds // 3600)
-    mins = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    ms = int((seconds % 1) * 1000)
-    return f"{hrs:02d}:{mins:02d}:{secs:02d},{ms:03d}"
-
-def split_text_into_max_two_lines(text, max_words_per_line=6):
-    """جملوں کو 2 لائنوں پر تقسیم کرنے کے لیے"""
-    words = text.split()
-    if len(words) <= max_words_per_line:
-        return text
-    elif len(words) <= max_words_per_line * 2:
-        mid = len(words) // 2
-        return " ".join(words[:mid]) + "\n" + " ".join(words[mid:])
-    else:
-        line1 = " ".join(words[:max_words_per_line])
-        line2 = " ".join(words[max_words_per_line:max_words_per_line*2])
-        return line1 + "\n" + line2
-
-def process_audio_chunk(chunk_path):
-    try:
-        audio = AudioSegment.from_file(chunk_path)
-        audio = effects.normalize(audio)
-        audio.export(chunk_path, format="mp3", bitrate="128k")
-    except Exception as e:
-        pass
-
-if uploaded_file and st.button("Generate Perfect SRT ⚡"):
-    status_box = st.empty()
-    progress_bar = st.progress(0)
-    
-    status_box.info("فائل اپ لوڈ ہو رہی ہے، براہ کرم انتظار کریں...")
-    temp_path = f"temp_{uploaded_file.name}"
-    
-    with open(temp_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    try:
-        status_box.info("ویڈیو/آڈیو پروسیس کی جا رہی ہے اور آواز صاف کی جا رہی ہے...")
-        audio = AudioSegment.from_file(temp_path)
-        audio = effects.normalize(audio)
-        
-        total_duration = len(audio)
-        CHUNK_MS = 60 * 1000 
-        num_chunks = math.ceil(total_duration / CHUNK_MS)
-        all_segments = []
-
-        status_box.info("Kawish AI Caption is preparing translation...")
-        
-        for i in range(num_chunks):
-            chunk = audio[i*CHUNK_MS : min((i+1)*CHUNK_MS, total_duration)]
-            chunk_path = f"chunk_{i}.mp3"
-            chunk.export(chunk_path, format="mp3", bitrate="128k")
-
-            process_audio_chunk(chunk_path)
-
-            with open(chunk_path, "rb") as file:
-                prompt_text = "Accurate Urdu to English translation. Short sentences only. Avoid long paragraphs."
-                
-                transcription = client.audio.translations.create(
-                    file=(f"chunk_{i}.mp3", file.read()),
-                    model="whisper-large-v3",
-                    prompt=prompt_text,
-                    temperature=0.0,
-                    response_format="verbose_json"
-                )
-
-            time_offset = (i * CHUNK_MS) / 1000.0
-            for seg in getattr(transcription, 'segments', []):
-                seg['start'] += time_offset
-                seg['end'] += time_offset
-                all_segments.append(seg)
-
-            if os.path.exists(chunk_path): 
-                os.remove(chunk_path)
-                
-            progress_bar.progress((i + 1) / num_chunks)
-
-        srt_content = ""
-        count = 1
-        for seg in all_segments:
-            start, end = format_time(seg['start']), format_time(seg['end'])
-            txt = clean_text(seg['text'])
-            if txt:
-                formatted_txt = split_text_into_max_two_lines(txt)
-                srt_content += f"{count}\n{start} --> {end}\n{formatted_txt}\n\n"
-                count += 1
-
-        if os.path.exists(temp_path): 
-            os.remove(temp_path)
-
-        progress_bar.empty()
-        
-        if srt_content.strip():
-            status_box.success("🎉 .SRT فائل شارٹ کیپشنز (Max 2 Lines) کے ساتھ تیار ہے!")
-            st.download_button(
-                "📥 Download .SRT Subtitle File", 
-                srt_content, 
-                file_name=f"{os.path.splitext(uploaded_file.name)[0]}.srt", 
-                mime="text/plain"
-            )
-        else:
-            status_box.error("آڈیو میں سے کوئی واضح گفتگو نہیں مل سکی۔")
-
-    except Exception as e:
-        if os.path.exists(temp_path): os.remove(temp_path)
-        status_box.error(f"Error: {e}")
+        finally:
+            if os.path.exists("temp_video.mp4"):
+                os.remove("temp_video.mp4")
