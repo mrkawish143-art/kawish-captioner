@@ -3,13 +3,15 @@ import os, math, re
 from groq import Groq
 from pydub import AudioSegment, effects
 
-st.set_page_config(page_title="Kawish AI Captioner Pro", page_icon="🎙️", layout="centered")
-st.title("🎙️ Kawish AI Professional Captioner")
-st.caption("3,000 MB File Limit | Max 2 Lines Subtitles | Clean English")
+# ایپ کا فائنل نام
+st.set_page_config(page_title="کاوش اے آئی کیپشن", page_icon="🎙️", layout="centered")
+st.title("🎙️ کاوش اے آئی کیپشن")
+st.caption("3,000 MB File Limit | Max 2 Lines Subtitles | Clean English Translation")
 
 GROQ_API_KEY = "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"
 client = Groq(api_key=GROQ_API_KEY)
 
+# 3,000MB Limit and file types
 uploaded_file = st.file_uploader(
     "موبائل یا پی سی سے آڈیو/ویڈیو فائل منتخب کریں (حداکثر 3,000MB)", 
     type=["mp3", "m4a", "wav", "aac", "mp4", "mkv", "mov", "avi"]
@@ -42,7 +44,7 @@ def format_time(seconds):
     return f"{hrs:02d}:{mins:02d}:{secs:02d},{ms:03d}"
 
 def split_text_into_max_two_lines(text, max_words_per_line=6):
-    """یہ فنکشن لمبے ٹیکسٹ کو زیادہ سے زیادہ 2 لائنوں پر تقسیم کرتا ہے"""
+    """جملوں کو 2 لائنوں پر تقسیم کرنے کے لیے"""
     words = text.split()
     if len(words) <= max_words_per_line:
         return text
@@ -50,7 +52,6 @@ def split_text_into_max_two_lines(text, max_words_per_line=6):
         mid = len(words) // 2
         return " ".join(words[:mid]) + "\n" + " ".join(words[mid:])
     else:
-        # اگر جملہ بہت لمبا ہو تو اسے 2 لائنوں میں فٹ کریں
         line1 = " ".join(words[:max_words_per_line])
         line2 = " ".join(words[max_words_per_line:max_words_per_line*2])
         return line1 + "\n" + line2
@@ -83,7 +84,7 @@ if uploaded_file and st.button("Generate Perfect SRT ⚡"):
         num_chunks = math.ceil(total_duration / CHUNK_MS)
         all_segments = []
 
-        status_box.info("AI ترجمہ اور شارٹ کیپشنز تیار کر رہا ہے...")
+        status_box.info("کاوش اے آئی کیپشن ترجمہ تیار کر رہا ہے...")
         
         for i in range(num_chunks):
             chunk = audio[i*CHUNK_MS : min((i+1)*CHUNK_MS, total_duration)]
@@ -120,7 +121,6 @@ if uploaded_file and st.button("Generate Perfect SRT ⚡"):
             start, end = format_time(seg['start']), format_time(seg['end'])
             txt = clean_text(seg['text'])
             if txt:
-                # ٹیکسٹ کو 2 لائنوں سے زیادہ نہ بننے دینے کی گارنٹی
                 formatted_txt = split_text_into_max_two_lines(txt)
                 srt_content += f"{count}\n{start} --> {end}\n{formatted_txt}\n\n"
                 count += 1
