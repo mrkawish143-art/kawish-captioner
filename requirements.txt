@@ -1,3 +1,2 @@
 streamlit
-openai-whisper
-ffmpeg-python
+groq
